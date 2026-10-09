@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Garten Floor Plan – Vorschau</title>
+  <style>
+    body { margin: 0; padding: 24px; background: #0a0f0c; font-family: system-ui, sans-serif; color: #ddd; }
+    .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+    .col { width: 460px; max-width: 100%; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .controls button { background: #1c2a22; color: #ddd; border: 1px solid #2c3d33; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+    ha-card { display: block; }
+  </style>
+</head>
+<body>
+  <div class="controls" id="controls"></div>
+  <div class="row"><div class="col"><garten-floor-plan-card id="card"></garten-floor-plan-card></div></div>
+
+  <script type="module">
+    // Minimaler Ersatz für ha-icon (lädt Material Design Icons vom CDN).
+    import * as mdi from "https://cdn.jsdelivr.net/npm/@mdi/js@7.4.47/mdi.js";
+    const toKey = (name) => "mdi" + name.replace("mdi:", "").split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+    customElements.define("ha-icon", class extends HTMLElement {
+      static get observedAttributes() { return ["icon"]; }
+      connectedCallback() { this.render(); }
+      attributeChangedCallback() { this.render(); }
+      render() {
+        const path = mdi[toKey(this.getAttribute("icon") || "")] || mdi.mdiHelpCircleOutline;
+        this.innerHTML = `<svg viewBox="0 0 24 24" style="width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);fill:currentColor;display:block"><path d="${path}"/></svg>`;
+      }
+    });
+    customElements.define("ha-card", class extends HTMLElement {});
+    await import("../garten-floor-plan-card.js");
+
+    const states = {
+      "light.carport_2": { state: "on", attributes: { friendly_name: "Carport", rgb_color: [255, 180, 90] } },
+      "light.outdoor_kuche": { state: "on", attributes: { friendly_name: "Outdoor Küche", rgb_color: [255, 120, 200] } },
+      "light.led_bulb_string_lights": { state: "on", attributes: { friendly_name: "Lichterkette", rgb_color: [255, 210, 120] } },
+      "switch.shelly_licht": { state: "off", attributes: { friendly_name: "Licht Hütte" } },
+      "switch.shelly_hutte_ausensteckdosen_switch_0": { state: "on", attributes: { friendly_name: "Außensteckdose" } },
+      "switch.ventil_haus": { state: "off", attributes: { friendly_name: "Ventil Haus" } },
+      "switch.ventil_volleyball": { state: "on", attributes: { friendly_name: "Ventil Volleyball" } },
+      "switch.ventil_bananen": { state: "off", attributes: { friendly_name: "Ventil Bananen" } },
+      "sensor.bewasserung_haus_fortschritt": { state: "0", attributes: {} },
+      "sensor.bewasserung_volleyball_fortschritt": { state: "42", attributes: {} },
+      "sensor.bewasserung_bananen_fortschritt": { state: "0", attributes: {} },
+      "lawn_mower.aussen_leopard_2": { state: "docked", attributes: { friendly_name: "Leopard 2" } },
+      "sensor.system_solix_garten_sb_solarleistung": { state: "312", attributes: {} },
+      "sensor.system_solix_garten_sb_ladestand": { state: "76", attributes: {} },
+      "sensor.system_solix_garten_sb_akkuleistung": { state: "120", attributes: {} },
+      "sensor.solarerzeugung_tag": { state: "2.9", attributes: {} },
+      "switch.stecker_pumpe_switch_0": { state: "on", attributes: { friendly_name: "Hauswasserwerk" } },
+      "sensor.pool_laufzeit_formatiert": { state: "2 h 37 min", attributes: {} },
+      "switch.shelly_kuhlschrank": { state: "on", attributes: {} },
+      "select.aussen_leopard_2_haus_vermeidungsmodus": { state: "normal", attributes: {} },
+      "select.aussen_leopard_2_zeltplatz_vermeidungsmodus": { state: "normal", attributes: {} },
+      "select.aussen_leopard_2_volleyball_vermeidungsmodus": { state: "tall_grass", attributes: {} },
+      "select.aussen_leopard_2_parken_vermeidungsmodus": { state: "normal", attributes: {} },
+      "select.aussen_leopard_2_parkplatz_hinten_vermeidungsmodus": { state: "normal", attributes: {} },
+      "select.aussen_leopard_2_parkplatz_vermeidungsmodus": { state: "tall_grass", attributes: {} },
+    };
+    ["haus", "schuppen", "pool", "outdoor_kuche", "carport", "parkplatz", "tor", "nussbaum", "baum_oben"]
+      .forEach((c) => (states[`camera.${c}`] = { state: "idle", attributes: { friendly_name: c } }));
+
+    const card = document.getElementById("card");
+    const push = () => (card.hass = {
+      states: JSON.parse(JSON.stringify(states)),
+      callService(domain, service, data) {
+        const s = states[data.entity_id];
+        if (s) s.state = s.state === "on" ? "off" : "on";
+        push();
+      },
+    });
+
+    const params = new URLSearchParams(location.search);
+    card.setConfig({
+      title: "Garten",
+      active_layers: (params.get("layers") || "lights,irrigation,solar").split(","),
+    });
+    push();
+    card.addEventListener("hass-more-info", (e) => console.log("more-info", e.detail.entityId));
+
+    const ctl = document.getElementById("controls");
+    const btn = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = () => { fn(); push(); }; ctl.append(b); };
+    btn("Mäher: mäht/geparkt", () => (states["lawn_mower.aussen_leopard_2"].state = states["lawn_mower.aussen_leopard_2"].state === "mowing" ? "docked" : "mowing"));
+    btn("Ventil Haus", () => (states["switch.ventil_haus"].state = states["switch.ventil_haus"].state === "on" ? "off" : "on"));
+    btn("Ventil Bananen", () => (states["switch.ventil_bananen"].state = states["switch.ventil_bananen"].state === "on" ? "off" : "on"));
+    btn("Pumpe", () => (states["switch.stecker_pumpe_switch_0"].state = states["switch.stecker_pumpe_switch_0"].state === "on" ? "off" : "on"));
+    btn("Nacht (Solar 0 W)", () => (states["sensor.system_solix_garten_sb_solarleistung"].state = "0"));
+  </script>
+</body>
+</html>

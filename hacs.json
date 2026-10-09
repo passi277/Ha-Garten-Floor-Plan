@@ -1,0 +1,6 @@
+{
+  "name": "Garten Floor Plan Card",
+  "filename": "garten-floor-plan-card.js",
+  "render_readme": true,
+  "homeassistant": "2024.8.0"
+}
