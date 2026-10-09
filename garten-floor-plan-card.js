@@ -4,7 +4,7 @@
  * Ebenen: Licht · Bewässerung · Mähen · Solar · Kameras
  */
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 
 // Koordinatensystem der Karte (Grundstück 490 x 855).
 const W = 490;
@@ -79,6 +79,16 @@ const IRRIGATION_ZONES = [
     extra: [[[151, 464], [210, 464], [210, 654], [151, 654]]] },
 ];
 
+// Objekte, die (wenn in `popups` konfiguriert) als Ganzes antippbar sind.
+const HIT_AREAS = [
+  { key: "hut", label: "Hütte", x: 299, y: 168, w: 146, h: 97 },
+  { key: "pool", label: "Pool", x: 20, y: 234, w: 73, h: 126 },
+  { key: "kitchen", label: "Outdoor-Küche", x: 118, y: 391, w: 100, h: 57 },
+  { key: "carport", label: "Carport", x: 19, y: 500, w: 98, h: 148 },
+  { key: "shed", label: "Schuppen", x: 397, y: 126, w: 48, h: 42 },
+  { key: "raised_bed", label: "Hochbeet", x: 10, y: 687, w: 145, h: 95 },
+];
+
 const MOWER_STATES = {
   docked: "Geparkt", mowing: "Mäht", paused: "Pausiert",
   returning: "Fährt heim", error: "Fehler", unavailable: "Offline",
@@ -103,6 +113,7 @@ class GartenFloorPlanCard extends HTMLElement {
       mower_position: { x: 400, y: 292 },
       ...config,
       entities: { ...DEFAULT_ENTITIES, ...(config.entities || {}) },
+      popups: config.popups || {},
       mow_zones: config.mow_zones || DEFAULT_MOW_ZONES,
       cameras: config.cameras || DEFAULT_CAMERAS,
     };
@@ -115,6 +126,7 @@ class GartenFloorPlanCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (this._popCard) this._popCard.hass = hass;
     this._update(false);
   }
 
@@ -182,7 +194,16 @@ class GartenFloorPlanCard extends HTMLElement {
           </svg>
           <div class="markers" id="markers"></div>
         </div>
-      </ha-card>`;
+      </ha-card>
+      <div class="pop" id="pop" hidden>
+        <div class="pop-sheet" role="dialog" aria-modal="true">
+          <div class="pop-head">
+            <span class="pop-title" id="pop-title"></span>
+            <button class="pop-x" id="pop-x" aria-label="Schließen"><ha-icon icon="mdi:close"></ha-icon></button>
+          </div>
+          <div class="pop-body" id="pop-body"></div>
+        </div>
+      </div>`;
 
     this.shadowRoot.querySelectorAll(".chip.layer").forEach((b) =>
       b.addEventListener("click", () => {
@@ -192,6 +213,11 @@ class GartenFloorPlanCard extends HTMLElement {
       })
     );
     this._bindMarkers(this.shadowRoot.getElementById("markers"));
+    const pop = this.shadowRoot.getElementById("pop");
+    pop.addEventListener("click", (ev) => {
+      if (ev.target === pop) this._closePopup();
+    });
+    this.shadowRoot.getElementById("pop-x").addEventListener("click", () => this._closePopup());
   }
 
   _staticSvg() {
@@ -436,11 +462,11 @@ class GartenFloorPlanCard extends HTMLElement {
   _lightMarkers() {
     const e = this._config.entities;
     return [
-      { entity: e.light_string, x: 299, y: 216, icon: "mdi:string-lights", label: "Lichterkette", r: 44 },
-      { entity: e.light_hut, x: 384, y: 206, icon: "mdi:ceiling-light", label: "Licht innen" },
-      { entity: e.socket_hut, x: 312, y: 254, icon: "mdi:power-socket-de", label: "Außensteckdose", r: 0 },
-      { entity: e.light_kitchen, x: 192, y: 420, icon: "mdi:led-strip-variant", label: "Küche", r: 46 },
-      { entity: e.light_carport, x: 68, y: 572, icon: "mdi:led-strip-variant", label: "Carport", r: 58 },
+      { entity: e.light_string, x: 299, y: 216, icon: "mdi:string-lights", key: "light_string", label: "Lichterkette", r: 44 },
+      { entity: e.light_hut, x: 384, y: 206, icon: "mdi:ceiling-light", key: "light_hut", label: "Licht innen" },
+      { entity: e.socket_hut, x: 312, y: 254, icon: "mdi:power-socket-de", key: "socket_hut", label: "Außensteckdose", r: 0 },
+      { entity: e.light_kitchen, x: 192, y: 420, icon: "mdi:led-strip-variant", key: "light_kitchen", label: "Küche", r: 46 },
+      { entity: e.light_carport, x: 68, y: 572, icon: "mdi:led-strip-variant", key: "light_carport", label: "Carport", r: 58 },
     ].filter((m) => m.entity);
   }
 
@@ -448,8 +474,14 @@ class GartenFloorPlanCard extends HTMLElement {
     const a = this._active;
     const e = this._config.entities;
     const mk = (m, cls, inner) =>
-      `<button class="m ${cls}" style="left:${pct(m.x, W)};top:${pct(m.y, H)}" data-entity="${esc(m.entity)}" data-action="${m.action || "more-info"}" title="${esc(this._name(m.entity, m.label))}">${inner}</button>`;
+      `<button class="m ${cls}" style="left:${pct(m.x, W)};top:${pct(m.y, H)}" data-entity="${esc(m.entity)}" data-key="${esc(m.key || "")}" data-action="${m.action || "more-info"}" title="${esc(this._name(m.entity, m.label))}">${inner}</button>`;
     let out = "";
+
+    // Unsichtbare Klickflächen für Objekte mit eigenem Pop-up
+    for (const h of HIT_AREAS) {
+      if (!this._config.popups[h.key]) continue;
+      out += `<button class="m hit" style="left:${pct(h.x, W)};top:${pct(h.y, H)};width:${pct(h.w, W)};height:${pct(h.h, H)}" data-entity="" data-key="${h.key}" data-action="more-info" title="${esc(h.label)}"></button>`;
+    }
 
     if (a.has("lights")) {
       for (const m of this._lightMarkers()) {
@@ -462,13 +494,13 @@ class GartenFloorPlanCard extends HTMLElement {
 
     if (a.has("irrigation") && e.pump) {
       const on = this._isOn(e.pump);
-      out += mk({ entity: e.pump, x: 144, y: 417, label: "Hauswasserwerk", action: "more-info" },
+      out += mk({ entity: e.pump, key: "pump", x: 144, y: 417, label: "Hauswasserwerk", action: "more-info" },
         `pump ${on ? "on" : ""}`, `<ha-icon icon="mdi:water-pump"></ha-icon>`);
       for (const z of IRRIGATION_ZONES) {
         const id = e[`valve_${z.key}`];
         if (!id) continue;
         const on = this._isOn(id);
-        out += mk({ entity: id, x: z.valve[0], y: z.valve[1], label: `Ventil ${z.name}` },
+        out += mk({ entity: id, key: `valve_${z.key}`, x: z.valve[0], y: z.valve[1], label: `Ventil ${z.name}` },
           `valve ${on ? "on" : ""}`, `<ha-icon icon="${on ? "mdi:water" : "mdi:water-off-outline"}"></ha-icon>`);
       }
     }
@@ -477,17 +509,17 @@ class GartenFloorPlanCard extends HTMLElement {
       const s = this._st(e.mower);
       const state = s ? s.state : "unavailable";
       const p = this._config.mower_position;
-      out += mk({ entity: e.mower, x: p.x, y: p.y, label: "Mäher" }, `mower ${state}`,
+      out += mk({ entity: e.mower, key: "mower", x: p.x, y: p.y, label: "Mäher" }, `mower ${state}`,
         `<ha-icon icon="mdi:robot-mower"></ha-icon><span class="bubble">${esc(MOWER_STATES[state] || state)}</span>`);
     }
 
     if (a.has("solar")) {
       const w = this._num(e.solar_power);
       const soc = this._num(e.battery_soc);
-      out += mk({ entity: e.solar_power, x: 68, y: 530, label: "Solar Carport" }, "solar-badge",
+      out += mk({ entity: e.solar_power, key: "solar", x: 68, y: 530, label: "Solar Carport" }, "solar-badge",
         `<ha-icon icon="mdi:solar-power-variant"></ha-icon><span>${w !== null ? `${Math.round(w)} W` : "–"}</span>`);
       if (e.battery_soc) {
-        out += mk({ entity: e.battery_soc, x: 262, y: 466, label: "Anker Solix" }, `solix ${soc !== null && soc < 20 ? "low" : ""}`,
+        out += mk({ entity: e.battery_soc, key: "battery", x: 262, y: 466, label: "Anker Solix" }, `solix ${soc !== null && soc < 20 ? "low" : ""}`,
           `<ha-icon icon="${this._batteryIcon(soc)}"></ha-icon><span>${soc !== null ? `${Math.round(soc)} %` : "–"}</span>`);
       }
     }
@@ -495,13 +527,13 @@ class GartenFloorPlanCard extends HTMLElement {
     if (a.has("cameras")) {
       for (const c of this._config.cameras) {
         if (!this._st(c.entity) && this._hass) continue;
-        out += mk({ entity: c.entity, x: c.x, y: c.y, label: c.name }, "cam", `<ha-icon icon="mdi:cctv"></ha-icon>`);
+        out += mk({ entity: c.entity, key: `camera:${c.entity}`, x: c.x, y: c.y, label: c.name }, "cam", `<ha-icon icon="mdi:cctv"></ha-icon>`);
       }
     }
 
     // Pool-Badge immer sichtbar
     if (e.pool_runtime && this._st(e.pool_runtime)) {
-      out += mk({ entity: e.pool_runtime, x: 56, y: 297, label: "Pool" }, "pool",
+      out += mk({ entity: e.pool_runtime, key: "pool", x: 56, y: 297, label: "Pool" }, "pool",
         `<ha-icon icon="mdi:pool"></ha-icon><span>${esc(this._st(e.pool_runtime).state)}</span>`);
     }
     return out;
@@ -560,7 +592,7 @@ class GartenFloorPlanCard extends HTMLElement {
       held = false;
       timer = setTimeout(() => {
         held = true;
-        this._moreInfo(t.dataset.entity);
+        if (t.dataset.entity) this._moreInfo(t.dataset.entity);
       }, 500);
     });
     const cancel = () => clearTimeout(timer);
@@ -573,9 +605,75 @@ class GartenFloorPlanCard extends HTMLElement {
     container.addEventListener("click", (ev) => {
       const t = target(ev);
       if (!t || held) return;
-      if (t.dataset.action === "toggle") this._toggle(t.dataset.entity);
-      else this._moreInfo(t.dataset.entity);
+      const { entity, key, action } = t.dataset;
+      const popup = this._config.tap_action !== "toggle" ? this._popupConfig(key, entity) : null;
+      if (popup) this._openPopup(popup, entity, t.title);
+      else if (action === "toggle") this._toggle(entity);
+      else if (entity) this._moreInfo(entity);
     });
+  }
+
+  // ---------- Pop-ups ----------
+  _popupConfig(key, entity) {
+    const custom = key ? this._config.popups[key] : undefined;
+    if (custom === false) return null;
+    if (custom) return custom.card ? custom : { card: custom };
+    if (!entity) return null;
+    const domain = entity.split(".")[0];
+    const has = (tag) => !!customElements.get(tag);
+    if (domain === "light") {
+      return { card: has("ha-light-card")
+        ? { type: "custom:ha-light-card", entity }
+        : { type: "tile", entity, features: [{ type: "light-brightness" }] } };
+    }
+    if (domain === "lawn_mower") {
+      return { card: has("ha-mower-card")
+        ? { type: "custom:ha-mower-card", entity }
+        : { type: "tile", entity, features: [{ type: "lawn-mower-commands", commands: ["start_pause", "dock"] }] } };
+    }
+    if (domain === "camera") return { card: { type: "picture-entity", entity, camera_view: "live", show_state: false } };
+    if (domain === "switch") return { card: { type: "tile", entity, features: [{ type: "toggle" }] } };
+    return null;
+  }
+
+  async _openPopup(popup, entity, fallbackTitle) {
+    const root = this.shadowRoot;
+    const body = root.getElementById("pop-body");
+    let card;
+    try {
+      const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : null;
+      if (!helpers) throw new Error("no card helpers");
+      card = await helpers.createCardElement(popup.card);
+    } catch (err) {
+      if (entity) this._moreInfo(entity);
+      return;
+    }
+    card.hass = this._hass;
+    body.replaceChildren(card);
+    this._popCard = card;
+    root.getElementById("pop-title").textContent = popup.title || (entity ? this._name(entity, fallbackTitle) : fallbackTitle) || "";
+    const pop = root.getElementById("pop");
+    pop.hidden = false;
+    requestAnimationFrame(() => pop.classList.add("open"));
+    this._escHandler = (ev) => ev.key === "Escape" && this._closePopup();
+    window.addEventListener("keydown", this._escHandler);
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
+
+  _closePopup() {
+    const pop = this.shadowRoot && this.shadowRoot.getElementById("pop");
+    if (!pop || pop.hidden) return;
+    pop.classList.remove("open");
+    window.removeEventListener("keydown", this._escHandler);
+    setTimeout(() => {
+      pop.hidden = true;
+      this.shadowRoot.getElementById("pop-body").replaceChildren();
+      this._popCard = null;
+    }, 220);
+  }
+
+  disconnectedCallback() {
+    if (this._escHandler) window.removeEventListener("keydown", this._escHandler);
   }
 
   _toggle(entityId) {
@@ -714,6 +812,40 @@ const STYLE = `
   .m.cam ha-icon { --mdc-icon-size: 15px; }
   .m.pool { color: #7dd3fc; font-size: .66rem; height: 28px; }
   .m.pool ha-icon { --mdc-icon-size: 15px; }
+
+  .m.hit { transform: none; background: transparent; border: 0; box-shadow: none; border-radius: 8px; padding: 0; min-width: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .m.hit:hover { transform: none; background: rgba(255,255,255,.06); }
+  .m.hit:active { transform: none; background: rgba(255,255,255,.1); }
+
+  /* Pop-up */
+  .pop {
+    position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;
+    background: rgba(4, 8, 6, 0); backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0);
+    transition: background .22s ease, backdrop-filter .22s ease;
+  }
+  .pop[hidden] { display: none; }
+  .pop.open { background: rgba(4, 8, 6, .55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .pop-sheet {
+    width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 48px); overflow: auto;
+    background: rgba(16, 24, 20, .92); color: var(--g-text);
+    border: 1px solid var(--g-border); border-radius: 24px; padding: 14px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+    transform: translateY(24px) scale(.97); opacity: 0; transition: transform .22s ease, opacity .22s ease;
+    overscroll-behavior: contain;
+  }
+  .pop.open .pop-sheet { transform: none; opacity: 1; }
+  .pop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 4px 12px; }
+  .pop-title { font-size: 1.05rem; font-weight: 600; }
+  .pop-x {
+    display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid var(--g-border); background: rgba(255,255,255,.06); color: var(--g-text); cursor: pointer;
+  }
+  .pop-x ha-icon { --mdc-icon-size: 18px; }
+  @media (max-width: 600px) {
+    .pop { align-items: flex-end; }
+    .pop-sheet { width: 100vw; max-height: 88vh; border-radius: 24px 24px 0 0; padding-bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateY(100%); opacity: 1; }
+    .pop-sheet::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); margin: 0 auto 10px; }
+  }
 
   @keyframes flicker { 0%,100% { opacity: .45; } 50% { opacity: .85; } }
   @keyframes shimmer { 0%,100% { transform: translateX(0); opacity: .5; } 50% { transform: translateX(3px); opacity: .9; } }

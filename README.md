@@ -73,6 +73,27 @@ mow_zones:          # optional, ersetzt die Standardliste
     points: [[361, 5], [489, 5], [489, 108], [361, 108]]
 ```
 
+### Pop-ups
+
+Ein Tipp auf ein Element öffnet ein Pop-up mit einer beliebigen Lovelace-Card. Langes Drücken öffnet weiterhin den Standard-Dialog von Home Assistant.
+Ohne eigene Konfiguration gelten diese Standards: Lichter → `custom:ha-light-card` (falls installiert, sonst `tile`), Mäher → `custom:ha-mower-card`, Kameras → Live-Bild, Schalter → `tile`.
+
+```yaml
+popups:
+  pool:                         # Variante mit eigenem Titel
+    title: Smart Pool
+    card:
+      type: custom:ha-pool-card
+      pump: switch.stecker_pool_neu
+  pump:                         # oder direkt die Card-Konfiguration
+    type: custom:ha-irrigation-card
+    pump: switch.stecker_pumpe_switch_0
+  valve_haus: false             # Pop-up abschalten → Standardverhalten
+```
+
+Mögliche Schlüssel: `light_string`, `light_hut`, `socket_hut`, `light_kitchen`, `light_carport`, `pump`, `valve_haus`, `valve_volleyball`, `valve_bananen`, `mower`, `solar`, `battery`, `pool`, `camera:<entity_id>` sowie die Objekte `hut`, `kitchen`, `carport`, `shed`, `raised_bed`. Objekte werden nur antippbar, wenn für sie ein Pop-up konfiguriert ist.
+Mit `tap_action: toggle` wird global wieder direkt geschaltet statt ein Pop-up zu öffnen.
+
 Das Koordinatensystem der Karte ist 490 × 855 Einheiten groß (links oben = 0/0, Parkplatz unten).
 
 ## Entwicklung / Vorschau

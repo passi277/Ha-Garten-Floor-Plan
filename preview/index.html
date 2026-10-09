@@ -31,6 +31,15 @@
       }
     });
     customElements.define("ha-card", class extends HTMLElement {});
+    // Ersatz für HAs Card-Helfer: rendert eine Platzhalter-Card mit der Konfiguration.
+    window.loadCardHelpers = async () => ({
+      createCardElement(cfg) {
+        const el = document.createElement("div");
+        el.style.cssText = "display:block;padding:16px;border-radius:16px;background:#1c2a22;color:#e8f0ea;font:13px/1.5 system-ui";
+        el.innerHTML = `<div style="font-weight:600;margin-bottom:6px">${cfg.type}</div><pre style="margin:0;white-space:pre-wrap;color:#9fb3a6">${JSON.stringify(cfg, null, 2)}</pre>`;
+        return el;
+      },
+    });
     await import("../garten-floor-plan-card.js");
 
     const states = {
@@ -76,6 +85,10 @@
     const params = new URLSearchParams(location.search);
     card.setConfig({
       title: "Garten",
+      popups: {
+        pool: { title: "Smart Pool", card: { type: "custom:ha-pool-card", pump: "switch.stecker_pool_neu" } },
+        pump: { type: "custom:ha-irrigation-card", title: "Hauswasserwerk", pump: "switch.stecker_pumpe_switch_0" },
+      },
       active_layers: (params.get("layers") || "lights,irrigation,solar").split(","),
     });
     push();
