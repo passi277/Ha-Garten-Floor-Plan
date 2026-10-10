@@ -3,7 +3,7 @@
 Eine moderne, interaktive Gartenkarte (Draufsicht) für Home Assistant im dunklen Glas-Design.
 Lichter, Bewässerung, Mähzonen, Solar und Kameras werden direkt auf dem Grundriss angezeigt und lassen sich dort bedienen.
 
-| Licht · Bewässerung · Solar | Mähen · Kameras |
+| Strom · Bewässerung | Mähen · Kameras |
 |---|---|
 | ![Vorschau](docs/preview.png) | ![Mähzonen](docs/preview-maehen.png) |
 
@@ -11,9 +11,10 @@ Lichter, Bewässerung, Mähzonen, Solar und Kameras werden direkt auf dem Grundr
 
 - **Ebenen-Chips**: Licht, Bewässerung, Mähen, Solar und Kameras lassen sich einzeln ein- und ausblenden.
 - **Licht**: Lichterkette, Licht innen, Außensteckdose (Hütte), Outdoor-Küche und Carport. Ein Tipp schaltet um, langes Drücken öffnet die Details. Eingeschaltete Lichter leuchten in ihrer echten RGB-Farbe.
-- **Bewässerung**: Zonen Haus, Volleyball und Bananen. Bei aktivem Ventil gibt es eine animierte Welle und den Fortschritt in %. Das Hauswasserwerk pulsiert, solange es läuft.
-- **Mähen**: Alle Mähzonen des Mähers mit gestreiftem Rasenmuster und dem jeweiligen Vermeidungsmodus. Der Mäher zeigt seinen Status, beim Mähen pulsiert er und die Zonen laufen animiert.
-- **Solar**: Panels auf Carport und Outdoor-Küche leuchten je nach aktueller Leistung. Dazu kommen ein Watt-Badge und der Ladestand der Anker Solix.
+- **Bewässerung**: Rohrleitungen vom Hauswasserwerk zu den Ventilen und weiter zu den Sprinklern. Fließt Wasser, wandern Tropfen durch die Leitung, schneller bei mehr Durchfluss. Dazu kommen Durchfluss in l/min und Fortschritt in %.
+- **Mähen**: Zonen wie in der Mäher-App (Haus, Zeltplatz, Volleyball inkl. Streifen und Ecke, Parken an der Ladestation, Parkplatz, Parkplatz hinten) mit Vermeidungsmodus und Fläche aus der Mäherkarte. Live-Position, Spur des aktuellen Mähvorgangs und die gerade gemähte Zone kommen aus `sensor.leopard_2_live_map`.
+- **Strom**: Leitungen von den Solarpanels zur Anker Solix, von dort ins Hausnetz und zu den Verbrauchern (Hütte: Kühlschrank, Starlink, Außensteckdose; Hauswasserwerk; Poolpumpe) sowie Netzbezug und Einspeisung. Wandernde Punkte zeigen Richtung und Stärke, Watt-Werte stehen direkt dran. Die Akku-Anzeige zeigt Laden und Entladen.
+- **Pool**: Läuft die Poolpumpe, zirkuliert das Wasser sichtbar, Blasen steigen an der Düse auf und die Filterleitung ist animiert.
 - **Kameras**: Kamera-Pins öffnen das Live-Bild.
 - **Kopfzeile**: Zusammenfassung mit Lichtern an, aktiven Ventilen, Mäherstatus sowie Solar-Leistung und Akku.
 - Keine Abhängigkeiten, kein Build-Schritt, respektiert `prefers-reduced-motion`.
@@ -93,6 +94,16 @@ popups:
 
 Mögliche Schlüssel: `light_string`, `light_hut`, `socket_hut`, `light_kitchen`, `light_carport`, `pump`, `valve_haus`, `valve_volleyball`, `valve_bananen`, `mower`, `solar`, `battery`, `pool`, `camera:<entity_id>` sowie die Objekte `hut`, `kitchen`, `carport`, `shed`, `raised_bed`. Objekte werden nur antippbar, wenn für sie ein Pop-up konfiguriert ist.
 Mit `tap_action: toggle` wird global wieder direkt geschaltet statt ein Pop-up zu öffnen.
+
+### Mäherkarte
+
+Die Position des Mähers wird von Millimetern der Mäherkarte stückweise linear auf den Plan umgerechnet. Mit `map_points` lässt sich das feinjustieren:
+
+```yaml
+map_points:
+  x: [[-13800, 0], [-1350, 283], [0, 296], [5450, 490]]
+  y: [[8700, 0], [3400, 108], [-2850, 290], [-22550, 795], [-25750, 855]]
+```
 
 Das Koordinatensystem der Karte ist 490 × 855 Einheiten groß (links oben = 0/0, Parkplatz unten).
 

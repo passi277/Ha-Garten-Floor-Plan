@@ -55,10 +55,30 @@
       "sensor.bewasserung_volleyball_fortschritt": { state: "42", attributes: {} },
       "sensor.bewasserung_bananen_fortschritt": { state: "0", attributes: {} },
       "lawn_mower.aussen_leopard_2": { state: "docked", attributes: { friendly_name: "Leopard 2" } },
-      "sensor.system_solix_garten_sb_solarleistung": { state: "312", attributes: {} },
-      "sensor.system_solix_garten_sb_ladestand": { state: "76", attributes: {} },
-      "sensor.system_solix_garten_sb_akkuleistung": { state: "120", attributes: {} },
-      "sensor.solarerzeugung_tag": { state: "2.9", attributes: {} },
+      "sensor.solarbank_3_e2700_pro_solarleistung": { state: "312", attributes: {} },
+      "sensor.solarbank_3_e2700_pro_ladestand": { state: "76", attributes: {} },
+      "sensor.solarbank_3_e2700_pro_aufladeleistung": { state: "120", attributes: {} },
+      "sensor.solarbank_3_e2700_pro_entladeleistung": { state: "0", attributes: {} },
+      "sensor.system_solix_garten_hausbedarf": { state: "180", attributes: {} },
+      "sensor.smart_meter_netzbezug": { state: "0", attributes: {} },
+      "sensor.smart_meter_netzeinspeisung": { state: "14", attributes: {} },
+      "sensor.stecker_pumpe_switch_0_power": { state: "640", attributes: {} },
+      "switch.stecker_pool_neu": { state: "on", attributes: { friendly_name: "Poolpumpe" } },
+      "sensor.stecker_pool_neu_power": { state: "310", attributes: {} },
+      "sensor.shelly_kuhlschrank_power": { state: "62", attributes: { friendly_name: "Kühlschrank" } },
+      "sensor.starlink_leistung": { state: "40", attributes: { friendly_name: "Starlink" } },
+      "sensor.shelly_hutte_ausensteckdosen_switch_0_power": { state: "9.4", attributes: { friendly_name: "Außensteckdose" } },
+      "sensor.ventil_volleyball_flow": { state: "1.19", attributes: {} },
+      "sensor.ventil_haus_flow": { state: "0", attributes: {} },
+      "sensor.ventil_bananen_flow": { state: "0", attributes: {} },
+      "sensor.aussen_leopard_2_fortschritt": { state: "38", attributes: {} },
+      "sensor.aussen_leopard_2_aktuelle_bereiche": { state: "Volleyball", attributes: { area_ids: [] } },
+      "sensor.leopard_2_live_map": { state: "x", attributes: {
+        current_position: { x: 4, y: 0, invalid: 0 }, charge_positions: [{ x: 0, y: 0 }],
+        trace: { path: [] },
+        areas: [{ id: "2", name: "Zeltplatz", area_m2: 16.2 }, { id: "1", name: "Parkplatz hinten", area_m2: 18.7 },
+          { id: "5", name: "Parkplatz", area_m2: 33.5 }, { id: "4", name: "Volleyball", area_m2: 192 },
+          { id: "3", name: "Haus", area_m2: 137.6 }, { id: "6", name: "Parken", area_m2: 1.6 }] } },
       "switch.stecker_pumpe_switch_0": { state: "on", attributes: { friendly_name: "Hauswasserwerk" } },
       "sensor.pool_laufzeit_formatiert": { state: "2 h 37 min", attributes: {} },
       "switch.shelly_kuhlschrank": { state: "on", attributes: {} },
@@ -96,11 +116,22 @@
 
     const ctl = document.getElementById("controls");
     const btn = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = () => { fn(); push(); }; ctl.append(b); };
-    btn("Mäher: mäht/geparkt", () => (states["lawn_mower.aussen_leopard_2"].state = states["lawn_mower.aussen_leopard_2"].state === "mowing" ? "docked" : "mowing"));
+    // Simulierte Mähfahrt im Volleyballfeld (Koordinaten in mm wie die Mäherkarte).
+    const mowDemo = () => {
+      const m = states["sensor.leopard_2_live_map"].attributes;
+      const path = [];
+      for (let i = 0; i < 9; i++) { const y = -4000 - i * 1500; path.push([-3500, y], [5000, y]); }
+      m.trace.path = path; m.current_position = { x: 5000, y: -16000, invalid: 0 };
+      states["sensor.aussen_leopard_2_aktuelle_bereiche"].attributes.area_ids = ["4"];
+      states["lawn_mower.aussen_leopard_2"].state = "mowing";
+    };
+    if (params.get("mow")) { mowDemo(); push(); }
+    btn("Mäher: Demo-Mähfahrt", mowDemo);
     btn("Ventil Haus", () => (states["switch.ventil_haus"].state = states["switch.ventil_haus"].state === "on" ? "off" : "on"));
     btn("Ventil Bananen", () => (states["switch.ventil_bananen"].state = states["switch.ventil_bananen"].state === "on" ? "off" : "on"));
     btn("Pumpe", () => (states["switch.stecker_pumpe_switch_0"].state = states["switch.stecker_pumpe_switch_0"].state === "on" ? "off" : "on"));
-    btn("Nacht (Solar 0 W)", () => (states["sensor.system_solix_garten_sb_solarleistung"].state = "0"));
+    btn("Nacht (Solar 0 W, Netzbezug)", () => { states["sensor.solarbank_3_e2700_pro_solarleistung"].state = "0"; states["sensor.smart_meter_netzbezug"].state = "230"; states["sensor.smart_meter_netzeinspeisung"].state = "0"; states["sensor.solarbank_3_e2700_pro_aufladeleistung"].state = "0"; states["sensor.solarbank_3_e2700_pro_entladeleistung"].state = "150"; });
+    btn("Pool an/aus", () => (states["switch.stecker_pool_neu"].state = states["switch.stecker_pool_neu"].state === "on" ? "off" : "on", states["sensor.stecker_pool_neu_power"].state = states["switch.stecker_pool_neu"].state === "on" ? "310" : "0"));
   </script>
 </body>
 </html>

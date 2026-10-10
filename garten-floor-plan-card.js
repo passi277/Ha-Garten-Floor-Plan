@@ -1,10 +1,10 @@
 /**
  * Garten Floor Plan Card
  * Moderne, interaktive Gartenkarte (Draufsicht) für Home Assistant.
- * Ebenen: Licht · Bewässerung · Mähen · Solar · Kameras
+ * Ebenen: Licht · Bewässerung · Mähen · Strom · Kameras
  */
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 
 // Koordinatensystem der Karte (Grundstück 490 x 855).
 const W = 490;
@@ -22,32 +22,56 @@ const DEFAULT_ENTITIES = {
   progress_haus: "sensor.bewasserung_haus_fortschritt",
   progress_volleyball: "sensor.bewasserung_volleyball_fortschritt",
   progress_bananen: "sensor.bewasserung_bananen_fortschritt",
+  flow_haus: "sensor.ventil_haus_flow",
+  flow_volleyball: "sensor.ventil_volleyball_flow",
+  flow_bananen: "sensor.ventil_bananen_flow",
   mower: "lawn_mower.aussen_leopard_2",
-  solar_power: "sensor.system_solix_garten_sb_solarleistung",
-  battery_soc: "sensor.system_solix_garten_sb_ladestand",
-  battery_power: "sensor.system_solix_garten_sb_akkuleistung",
-  solar_today: "sensor.solarerzeugung_tag",
+  mower_map: "sensor.leopard_2_live_map",
+  mower_areas: "sensor.aussen_leopard_2_aktuelle_bereiche",
+  mower_progress: "sensor.aussen_leopard_2_fortschritt",
+  solar_power: "sensor.solarbank_3_e2700_pro_solarleistung",
+  battery_soc: "sensor.solarbank_3_e2700_pro_ladestand",
+  battery_charge: "sensor.solarbank_3_e2700_pro_aufladeleistung",
+  battery_discharge: "sensor.solarbank_3_e2700_pro_entladeleistung",
+  home_power: "sensor.system_solix_garten_hausbedarf",
+  grid_import: "sensor.smart_meter_netzbezug",
+  grid_export: "sensor.smart_meter_netzeinspeisung",
   pump: "switch.stecker_pumpe_switch_0",
+  pump_power: "sensor.stecker_pumpe_switch_0_power",
+  pool_pump: "switch.stecker_pool_neu",
+  pool_power: "sensor.stecker_pool_neu_power",
   pool_runtime: "sensor.pool_laufzeit_formatiert",
-  fridge: "switch.shelly_kuhlschrank",
 };
 
+// Verbraucher an der Hütte (Leitung vom Hausnetz-Knoten + Watt-Anzeige).
+const DEFAULT_CONSUMERS = [
+  { name: "Kühlschrank", entity: "sensor.shelly_kuhlschrank_power", icon: "mdi:fridge", x: 424, y: 246, path: "M334 256 H424 V252" },
+  { name: "Starlink", entity: "sensor.starlink_leistung", icon: "mdi:satellite-variant", x: 407, y: 186, path: "M342 256 V200 H396" },
+  { name: "Außensteckdose", entity: "sensor.shelly_hutte_ausensteckdosen_switch_0_power", icon: "mdi:power-socket-de", x: 306, y: 238, path: "M330 256 H306 V246" },
+];
+
+// Mähzonen nach der Skizze. Volleyball = großes Feld + Streifen + Ecke (wie in der Mäher-App),
+// Parken = kleiner Bereich an der Ladestation.
 const DEFAULT_MOW_ZONES = [
-  { name: "Haus", select: "select.aussen_leopard_2_haus_vermeidungsmodus",
+  { name: "Haus", select: "select.aussen_leopard_2_haus_vermeidungsmodus", label: [150, 190],
     points: [[5, 5], [291, 5], [291, 386], [5, 386]] },
-  { name: "Zeltplatz", select: "select.aussen_leopard_2_zeltplatz_vermeidungsmodus",
+  { name: "Zeltplatz", select: "select.aussen_leopard_2_zeltplatz_vermeidungsmodus", label: [425, 58],
     points: [[361, 5], [489, 5], [489, 108], [361, 108]] },
-  { name: "Volleyball", select: "select.aussen_leopard_2_volleyball_vermeidungsmodus",
-    points: [[304, 290], [489, 290], [489, 795], [304, 795]] },
-  { name: "Parken", select: "select.aussen_leopard_2_parken_vermeidungsmodus",
-    points: [[223, 409], [303, 409], [303, 795], [223, 795]] },
-  { name: "Ecke", select: null,
-    points: [[158, 677], [219, 677], [219, 795], [158, 795]] },
-  { name: "Parkplatz hinten", select: "select.aussen_leopard_2_parkplatz_hinten_vermeidungsmodus",
+  { name: "Volleyball", select: "select.aussen_leopard_2_volleyball_vermeidungsmodus", label: [397, 540],
+    points: [[304, 290], [489, 290], [489, 795], [158, 795], [158, 677], [223, 677], [223, 409], [304, 409]] },
+  { name: "Parken", select: "select.aussen_leopard_2_parken_vermeidungsmodus", label: [262, 178],
+    points: [[268, 192], [297, 192], [297, 224], [268, 224]] },
+  { name: "Parkplatz hinten", select: "select.aussen_leopard_2_parkplatz_hinten_vermeidungsmodus", label: [75, 822],
     points: [[0, 785], [150, 785], [150, 855], [0, 855]] },
-  { name: "Parkplatz", select: "select.aussen_leopard_2_parkplatz_vermeidungsmodus",
+  { name: "Parkplatz", select: "select.aussen_leopard_2_parkplatz_vermeidungsmodus", label: [322, 832],
     points: [[155, 805], [489, 805], [489, 855], [155, 855]] },
 ];
+
+// Abbildung Mäherkarte (mm) -> Plan (stückweise linear, an den Zonengrenzen der Skizze ausgerichtet).
+const DEFAULT_MAP_POINTS = {
+  x: [[-13800, 0], [-1350, 283], [0, 296], [5450, 490]],
+  y: [[8700, 0], [3400, 108], [-2850, 290], [-22550, 795], [-25750, 855]],
+};
 
 const DEFAULT_CAMERAS = [
   { entity: "camera.haus", x: 312, y: 180 },
@@ -65,18 +89,22 @@ const LAYERS = [
   { id: "lights", label: "Licht", icon: "mdi:lightbulb-group" },
   { id: "irrigation", label: "Bewässerung", icon: "mdi:sprinkler-variant" },
   { id: "mowing", label: "Mähen", icon: "mdi:robot-mower" },
-  { id: "solar", label: "Solar", icon: "mdi:solar-power-variant" },
+  { id: "solar", label: "Strom", icon: "mdi:flash" },
   { id: "cameras", label: "Kameras", icon: "mdi:cctv" },
 ];
 
+// Rohre: `feed` = Pumpe -> Ventil, `out` = Ventil -> Sprinkler.
 const IRRIGATION_ZONES = [
-  { key: "haus", name: "Haus", label: [200, 330], valve: [200, 360],
-    points: [[112, 25], [288, 25], [288, 274], [484, 274], [484, 374], [112, 374]] },
-  { key: "volleyball", name: "Volleyball", label: [355, 610], valve: [355, 640],
-    points: [[226, 424], [484, 424], [484, 799], [226, 799]] },
-  { key: "bananen", name: "Bananen", label: [40, 452], valve: [40, 482],
+  { key: "haus", name: "Haus", label: [200, 322], valve: [200, 360],
+    points: [[112, 25], [288, 25], [288, 274], [484, 274], [484, 374], [112, 374]],
+    feed: "M150 405 V380 H200 V372", out: ["M200 348 V200", "M212 360 H390 V334"], heads: [[200, 196], [390, 330]] },
+  { key: "volleyball", name: "Volleyball", label: [355, 604], valve: [355, 640],
+    points: [[226, 424], [484, 424], [484, 799], [226, 799]],
+    feed: "M218 433 H355 V628", out: ["M355 652 V744", "M367 640 H440 V520"], heads: [[355, 748], [440, 516]] },
+  { key: "bananen", name: "Bananen", label: [40, 452], valve: [96, 474],
     points: [[0, 388], [78, 388], [78, 472], [0, 472]],
-    extra: [[[151, 464], [210, 464], [210, 654], [151, 654]]] },
+    extra: [[[151, 464], [210, 464], [210, 654], [151, 654]]],
+    feed: "M118 440 H96 V462", out: ["M84 474 H40 V432", "M108 474 H180 V540"], heads: [[40, 428], [180, 544]] },
 ];
 
 // Objekte, die (wenn in `popups` konfiguriert) als Ganzes antippbar sind.
@@ -110,10 +138,12 @@ class GartenFloorPlanCard extends HTMLElement {
       title: "Garten",
       layers: LAYERS.map((l) => l.id),
       show_labels: true,
-      mower_position: { x: 400, y: 292 },
+      mower_position: { x: 296, y: 208 },
+      map_points: DEFAULT_MAP_POINTS,
       ...config,
       entities: { ...DEFAULT_ENTITIES, ...(config.entities || {}) },
       popups: config.popups || {},
+      consumers: config.consumers || DEFAULT_CONSUMERS,
       mow_zones: config.mow_zones || DEFAULT_MOW_ZONES,
       cameras: config.cameras || DEFAULT_CAMERAS,
     };
@@ -167,6 +197,7 @@ class GartenFloorPlanCard extends HTMLElement {
     const ids = Object.values(this._config.entities);
     this._config.mow_zones.forEach((z) => z.select && ids.push(z.select));
     this._config.cameras.forEach((c) => ids.push(c.entity));
+    this._config.consumers.forEach((c) => ids.push(c.entity));
     return ids;
   }
 
@@ -191,6 +222,7 @@ class GartenFloorPlanCard extends HTMLElement {
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
             ${this._staticSvg()}
             <g id="dyn"></g>
+            <g id="live"></g>
           </svg>
           <div class="markers" id="markers"></div>
         </div>
@@ -293,6 +325,7 @@ class GartenFloorPlanCard extends HTMLElement {
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".45"/>
         </filter>
+        <clipPath id="poolclip"><rect x="27" y="241" width="59" height="112" rx="4"/></clipPath>
         <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
           <feGaussianBlur stdDeviation="6"/>
         </filter>
@@ -336,12 +369,23 @@ class GartenFloorPlanCard extends HTMLElement {
         <path class="caustic" d="M32 262q10 -6 20 0t20 0t12 0M32 292q10 -6 20 0t20 0t12 0M32 322q10 -6 20 0t20 0t12 0" />
         <path d="M70 347v7M76 347v7" stroke="#d1d5db" stroke-width="1.4"/>
       </g>
+      <!-- Poolfilter -->
+      <g filter="url(#shadow)">
+        <circle cx="104" cy="335" r="7" fill="#3b4250" stroke="#6b7380"/>
+        <circle cx="104" cy="335" r="3" fill="#1f2937"/>
+      </g>
 
       <!-- Outdoor-Küche -->
       <g filter="url(#shadow)">
         <rect x="118" y="391" width="100" height="57" rx="5" fill="url(#wood)" opacity=".9"/>${planks(118, 391, 100, 57, 9)}
         <rect x="131" y="405" width="26" height="24" rx="3" fill="#8a929c"/>
         <rect x="165" y="400" width="12" height="40" rx="3" fill="#20242a"/>
+      </g>
+
+      <!-- Anker Solix -->
+      <g filter="url(#shadow)">
+        <rect x="226" y="455" width="20" height="16" rx="3" fill="#1f2530" stroke="#4b5563"/>
+        <rect x="229" y="458" width="14" height="3" rx="1.5" fill="#22c55e" opacity=".8"/>
       </g>
 
       <!-- Carport / Lounge -->
@@ -380,7 +424,7 @@ class GartenFloorPlanCard extends HTMLElement {
         <text x="372" y="160">Hütte</text>
         <text x="421" y="120">Schuppen</text>
         <text x="466" y="222">WC</text>
-        <text x="56" y="376">Pool</text>
+        <text x="56" y="228">Pool</text>
         <text x="168" y="462">Outdoor-Küche</text>
         <text x="68" y="664">Carport</text>
         <text x="82" y="798">Hochbeet</text>
@@ -388,58 +432,120 @@ class GartenFloorPlanCard extends HTMLElement {
     `;
   }
 
+  // ---------- Fluss-Helfer ----------
+  // Leitung mit wandernden Punkten; `speed` steuert die Geschwindigkeit (z. B. Watt).
+  _flow(d, speed, kind, { reverse = false, min = 2 } = {}) {
+    const on = speed !== null && speed > min;
+    let out = `<path d="${d}" class="line ${kind} ${on ? "on" : ""}"/>`;
+    if (!on) return out;
+    const bucket = Math.min(10, Math.max(1, Math.round(Math.log2(speed + 1))));
+    const dur = Math.max(0.6, 5.2 - bucket * 0.45);
+    const n = bucket > 7 ? 4 : 3;
+    const rev = reverse ? ' keyPoints="1;0" keyTimes="0;1" calcMode="linear"' : "";
+    for (let i = 0; i < n; i++) {
+      out += `<circle r="2.4" class="dot ${kind}"><animateMotion dur="${dur.toFixed(2)}s" begin="${(-i * dur / n).toFixed(2)}s" repeatCount="indefinite" path="${d}"${rev}/></circle>`;
+    }
+    return out;
+  }
+
+  _bucket(v, min = 2) {
+    return v === null || v <= min ? 0 : Math.min(10, Math.max(1, Math.round(Math.log2(v + 1))));
+  }
+
+  _poolOn() {
+    const e = this._config.entities;
+    const w = this._num(e.pool_power);
+    return this._isOn(e.pool_pump) || (w !== null && w > 5);
+  }
+
+  _lpm(key) {
+    const v = this._num(this._e(`flow_${key}`));
+    return v === null ? null : (v * 1000) / 60;
+  }
+
+  // Werte, die die animierten Teile bestimmen (nur bei Änderung neu zeichnen, sonst ruckeln die Animationen).
+  _dynSig() {
+    const e = this._config.entities;
+    const parts = [[...this._active].join(","), this._poolOn(), this._isOn(e.pump), this._st(e.mower) && this._st(e.mower).state];
+    for (const z of IRRIGATION_ZONES) parts.push(this._isOn(e[`valve_${z.key}`]), this._bucket((this._lpm(z.key) || 0) * 15));
+    for (const k of ["solar_power", "battery_charge", "battery_discharge", "home_power", "grid_import", "grid_export", "pump_power", "pool_power"]) parts.push(this._bucket(this._num(e[k])));
+    for (const c of this._config.consumers) parts.push(this._bucket(this._num(c.entity)));
+    for (const m of this._lightMarkers()) parts.push(this._isOn(m.entity), this._lightColor(m.entity));
+    for (const z of this._config.mow_zones) parts.push(z.select && this._st(z.select) && this._st(z.select).state);
+    parts.push(this._activeAreas().join("|"));
+    return parts.join(";");
+  }
+
   _dynSvg() {
     const a = this._active;
+    const e = this._config.entities;
     let out = "";
 
+    // Pool: Wasser zirkuliert, solange die Pumpe läuft
+    if (this._poolOn()) {
+      const pw = this._num(e.pool_power) || 60;
+      out += `<g class="pool-run" clip-path="url(#poolclip)">
+        <ellipse cx="56.5" cy="297" rx="21" ry="44" class="swirl"/>
+        <ellipse cx="56.5" cy="297" rx="11" ry="26" class="swirl s2"/>
+        ${[0, 1, 2, 3].map((i) => `<circle cx="${80 - i * 3}" cy="${336 - i * 2}" r="2" class="bubble" style="animation-delay:${i * 0.45}s"/>`).join("")}
+      </g>`;
+      out += this._flow("M86 320 H104 V328", pw, "water", { min: 0 });
+      out += this._flow("M104 342 V350 H86", pw, "water", { min: 0 });
+    }
+
     if (a.has("mowing")) {
-      const mowing = this._isOn(this._e("mower"));
+      const mowing = this._isOn(e.mower);
+      const activeAreas = this._activeAreas();
       out += `<g class="mow ${mowing ? "active" : ""}">`;
       for (const z of this._config.mow_zones) {
-        const p = z.points;
-        const cx = p.reduce((s, q) => s + q[0], 0) / p.length;
-        const cy = p.reduce((s, q) => s + q[1], 0) / p.length;
         const sel = this._st(z.select);
-        const mode = sel ? AVOID_STATES[sel.state] || sel.state : "";
-        out += `<polygon points="${pts(p)}" class="mow-zone ${sel && sel.state !== "normal" ? "warn" : ""}"/>`;
-        out += `<g class="zone-tag" transform="translate(${cx} ${cy})">
-          <text class="zt-name" y="-2">${esc(z.name)}</text>
-          ${mode ? `<text class="zt-sub" y="11">${esc(mode)}</text>` : ""}</g>`;
+        const cur = activeAreas.includes(z.name);
+        out += `<polygon points="${pts(z.points)}" class="mow-zone ${sel && sel.state !== "normal" ? "warn" : ""} ${cur ? "current" : ""}"/>`;
       }
       out += `</g>`;
     }
 
     if (a.has("irrigation")) {
+      const pumpOn = this._isOn(e.pump);
       for (const z of IRRIGATION_ZONES) {
-        const on = this._isOn(this._e(`valve_${z.key}`));
-        const prog = this._num(this._e(`progress_${z.key}`));
+        const on = this._isOn(e[`valve_${z.key}`]);
+        const lpm = this._lpm(z.key);
+        const speed = on ? Math.max(lpm || 0, 12) * 15 : 0;
         const polys = [z.points, ...(z.extra || [])];
         out += `<g class="irr ${on ? "on" : ""}">`;
         polys.forEach((p) => (out += `<polygon points="${pts(p)}" class="irr-zone"/>`));
-        if (on) {
-          polys.forEach((p) => {
-            const xs = p.map((q) => q[0]), ys = p.map((q) => q[1]);
-            const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-            const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-            [0, 1, 2].forEach((i) => (out += `<circle cx="${cx}" cy="${cy}" r="8" class="ripple" style="animation-delay:${i * 0.8}s"/>`));
-          });
-        }
-        out += `<g class="zone-tag irr-tag" transform="translate(${z.label[0]} ${z.label[1]})">
-          <text class="zt-name" y="-2">💧 ${esc(z.name)}</text>
-          <text class="zt-sub" y="11">${on ? `läuft${prog !== null ? ` · ${Math.round(prog)} %` : ""}` : "aus"}</text></g>`;
+        out += this._flow(z.feed, on || pumpOn ? Math.max(speed, pumpOn ? 60 : 0) : 0, "water", { min: 0 });
+        z.out.forEach((d) => (out += this._flow(d, speed, "water", { min: 0 })));
+        z.heads.forEach(([x, y]) => {
+          out += `<circle cx="${x}" cy="${y}" r="3" class="head"/>`;
+          if (on) [0, 1, 2].forEach((i) => (out += `<circle cx="${x}" cy="${y}" r="6" class="ripple" style="animation-delay:${i * 0.8}s"/>`));
+        });
         out += `</g>`;
       }
     }
 
     if (a.has("solar")) {
-      const w = this._num(this._e("solar_power")) || 0;
-      const lvl = Math.min(1, w / 400);
+      const solar = this._num(e.solar_power) || 0;
+      const lvl = Math.min(1, solar / 400);
       out += `<g class="solar" style="--sun:${0.25 + lvl * 0.75}">
         <rect x="23" y="504" width="90" height="140" rx="4" fill="url(#solarcells)" class="panel"/>
         <rect x="122" y="395" width="92" height="49" rx="4" fill="url(#solarcells)" class="panel"/>
         <rect x="23" y="504" width="90" height="140" rx="4" class="panel-shine"/>
         <rect x="122" y="395" width="92" height="49" rx="4" class="panel-shine"/>
       </g>`;
+      // Solar -> Solix (Erzeugung auf beide Dächer aufgeteilt)
+      out += this._flow("M100 504 V490 H236 V471", solar * 0.6, "power");
+      out += this._flow("M206 444 V463 H226", solar * 0.4, "power");
+      // Solix -> Hausnetz (Hütte)
+      out += this._flow("M246 463 H268 V272 H334 V262", this._num(e.home_power), "power");
+      // Netz <-> Hütte
+      const imp = this._num(e.grid_import), exp = this._num(e.grid_export);
+      if (imp !== null && imp > 2) out += this._flow("M489 252 H445", imp, "grid-in");
+      else out += this._flow("M489 252 H445", exp, "grid-out", { reverse: true });
+      // Verbraucher
+      out += this._flow("M226 460 H150 V430", this._num(e.pump_power), "power");
+      out += this._flow("M226 467 H104 V342", this._num(e.pool_power), "power");
+      for (const c of this._config.consumers) if (c.path) out += this._flow(c.path, this._num(c.entity), "power");
     }
 
     // Lichtschein unter den Licht-Markern
@@ -451,6 +557,104 @@ class GartenFloorPlanCard extends HTMLElement {
     }
 
     return out;
+  }
+
+  // Beschriftungen und Mäherspur: ändern sich oft, enthalten keine Animationen.
+  _liveSvg() {
+    const a = this._active;
+    const e = this._config.entities;
+    let out = "";
+    const tag = (x, y, name, sub, cls = "") =>
+      `<g class="zone-tag ${cls}" transform="translate(${x} ${y})"><text class="zt-name" y="-2">${esc(name)}</text>${sub ? `<text class="zt-sub" y="11">${esc(sub)}</text>` : ""}</g>`;
+    const val = (x, y, text, cls) => `<g class="val ${cls}" transform="translate(${x} ${y})"><text>${esc(text)}</text></g>`;
+    const fmtW = (w) => (w >= 1000 ? `${(w / 1000).toFixed(1)} kW` : `${Math.round(w)} W`);
+
+    if (a.has("mowing")) {
+      const map = this._st(e.mower_map);
+      const areas = (map && map.attributes.areas) || [];
+      const activeAreas = this._activeAreas();
+      for (const z of this._config.mow_zones) {
+        const p = z.points;
+        const [x, y] = z.label || [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length];
+        const sel = this._st(z.select);
+        const area = areas.find((ar) => ar.name === z.name);
+        const sub = [sel ? AVOID_STATES[sel.state] || sel.state : "", area && area.area_m2 ? `${Math.round(area.area_m2)} m²` : ""].filter(Boolean).join(" · ");
+        out += tag(x, y, z.name, sub, activeAreas.includes(z.name) ? "cur" : "");
+      }
+      // Spur des aktuellen Mähvorgangs
+      const trace = map && map.attributes.trace && map.attributes.trace.path;
+      if (Array.isArray(trace) && trace.length > 1) {
+        const tp = trace.map((q) => this._mapPoint(Array.isArray(q) ? q[0] : q.x, Array.isArray(q) ? q[1] : q.y));
+        out += `<polyline points="${pts(tp)}" class="trace"/>`;
+      }
+      const dock = this._dockPos();
+      out += `<g class="dock" transform="translate(${dock[0]} ${dock[1]})"><rect x="-6" y="-6" width="12" height="12" rx="3"/><path d="M-2 -3 L2 0 L-2 3" /></g>`;
+    }
+
+    if (a.has("irrigation")) {
+      for (const z of IRRIGATION_ZONES) {
+        const on = this._isOn(e[`valve_${z.key}`]);
+        const prog = this._num(e[`progress_${z.key}`]);
+        const lpm = this._lpm(z.key);
+        const sub = on ? ["läuft", lpm ? `${lpm.toFixed(1)} l/min` : "", prog !== null ? `${Math.round(prog)} %` : ""].filter(Boolean).join(" · ") : "aus";
+        out += tag(z.label[0], z.label[1], `💧 ${z.name}`, sub, `irr-tag ${on ? "on" : ""}`);
+      }
+    }
+
+    if (a.has("solar")) {
+      const n = (k) => this._num(e[k]);
+      const home = n("home_power"), imp = n("grid_import"), exp = n("grid_export");
+      if (home !== null && home > 2) out += val(268, 360, `⌂ ${fmtW(home)}`, "power");
+      if (imp !== null && imp > 2) out += val(467, 245, `⚡ ${fmtW(imp)}`, "grid-in");
+      else if (exp !== null && exp > 2) out += val(467, 245, `↗ ${fmtW(exp)}`, "grid-out");
+      out += `<text x="486" y="266" class="edge-label">Netz</text>`;
+    }
+    return out;
+  }
+
+  // ---------- Mäherkarte ----------
+  _activeAreas() {
+    const e = this._config.entities;
+    const cur = this._st(e.mower_areas);
+    const map = this._st(e.mower_map);
+    const ids = (cur && cur.attributes.area_ids) || [];
+    const areas = (map && map.attributes.areas) || [];
+    return ids.map((id) => {
+      const ar = areas.find((x) => String(x.id) === String(id));
+      return ar ? ar.name : String(id);
+    });
+  }
+
+  _interp(v, table) {
+    const t = [...table].sort((p, q) => p[0] - q[0]);
+    if (v <= t[0][0]) return t[0][1];
+    for (let i = 1; i < t.length; i++) {
+      if (v <= t[i][0]) {
+        const [a0, b0] = t[i - 1], [a1, b1] = t[i];
+        return b0 + ((v - a0) / (a1 - a0)) * (b1 - b0);
+      }
+    }
+    return t[t.length - 1][1];
+  }
+
+  _mapPoint(x, y) {
+    const mp = this._config.map_points;
+    return [Math.round(this._interp(x, mp.x) * 10) / 10, Math.round(this._interp(y, mp.y) * 10) / 10];
+  }
+
+  _dockPos() {
+    const map = this._st(this._config.entities.mower_map);
+    const cp = map && map.attributes.charge_positions && map.attributes.charge_positions[0];
+    if (cp) return this._mapPoint(cp.x, cp.y);
+    const p = this._config.mower_position;
+    return [p.x, p.y];
+  }
+
+  _mowerPos() {
+    const map = this._st(this._config.entities.mower_map);
+    const cp = map && map.attributes.current_position;
+    if (cp && !cp.invalid) return this._mapPoint(cp.x, cp.y);
+    return this._dockPos();
   }
 
   _lightColor(id) {
@@ -508,19 +712,35 @@ class GartenFloorPlanCard extends HTMLElement {
     if (a.has("mowing") && e.mower) {
       const s = this._st(e.mower);
       const state = s ? s.state : "unavailable";
-      const p = this._config.mower_position;
-      out += mk({ entity: e.mower, key: "mower", x: p.x, y: p.y, label: "Mäher" }, `mower ${state}`,
-        `<ha-icon icon="mdi:robot-mower"></ha-icon><span class="bubble">${esc(MOWER_STATES[state] || state)}</span>`);
+      let [mx, my] = this._mowerPos();
+      mx = Math.min(W - 52, Math.max(52, mx));
+      my = Math.min(H - 16, Math.max(16, my));
+      const prog = this._num(e.mower_progress);
+      const txt = `${MOWER_STATES[state] || state}${state === "mowing" && prog !== null ? ` · ${Math.round(prog)} %` : ""}`;
+      out += mk({ entity: e.mower, key: "mower", x: mx, y: my, label: "Mäher" }, `mower ${state}`,
+        `<ha-icon icon="mdi:robot-mower"></ha-icon><span class="bubble">${esc(txt)}</span>`);
     }
 
     if (a.has("solar")) {
       const w = this._num(e.solar_power);
       const soc = this._num(e.battery_soc);
-      out += mk({ entity: e.solar_power, key: "solar", x: 68, y: 530, label: "Solar Carport" }, "solar-badge",
+      out += mk({ entity: e.solar_power, key: "solar", x: 68, y: 530, label: "Solar" }, "solar-badge",
         `<ha-icon icon="mdi:solar-power-variant"></ha-icon><span>${w !== null ? `${Math.round(w)} W` : "–"}</span>`);
       if (e.battery_soc) {
-        out += mk({ entity: e.battery_soc, key: "battery", x: 262, y: 466, label: "Anker Solix" }, `solix ${soc !== null && soc < 20 ? "low" : ""}`,
-          `<ha-icon icon="${this._batteryIcon(soc)}"></ha-icon><span>${soc !== null ? `${Math.round(soc)} %` : "–"}</span>`);
+        const ch = this._num(e.battery_charge), dis = this._num(e.battery_discharge);
+        const dir = ch !== null && ch > 2 ? `<span class="bdir in">▲ ${Math.round(ch)} W</span>` : dis !== null && dis > 2 ? `<span class="bdir out">▼ ${Math.round(dis)} W</span>` : "";
+        out += mk({ entity: e.battery_soc, key: "battery", x: 262, y: 486, label: "Anker Solix" }, `solix ${soc !== null && soc < 20 ? "low" : ""}`,
+          `<ha-icon icon="${ch > 2 ? "mdi:battery-charging" : this._batteryIcon(soc)}"></ha-icon><span>${soc !== null ? `${Math.round(soc)} %` : "–"}</span>${dir}`);
+      }
+      const extra = [
+        { name: "Hauswasserwerk", entity: e.pump_power, icon: "mdi:water-pump", x: 192, y: 420 },
+      ];
+      for (const c of [...this._config.consumers, ...extra]) {
+        if (!c.entity) continue;
+        const cw = this._num(c.entity);
+        if (cw === null) continue;
+        out += mk({ entity: c.entity, key: `consumer:${c.entity}`, x: c.x, y: c.y, label: c.name }, `consumer ${cw > 2 ? "on" : ""}`,
+          `<ha-icon icon="${c.icon || "mdi:flash"}"></ha-icon>${cw > 2 ? `<span>${Math.round(cw)} W</span>` : ""}`);
       }
     }
 
@@ -533,8 +753,10 @@ class GartenFloorPlanCard extends HTMLElement {
 
     // Pool-Badge immer sichtbar
     if (e.pool_runtime && this._st(e.pool_runtime)) {
-      out += mk({ entity: e.pool_runtime, key: "pool", x: 56, y: 297, label: "Pool" }, "pool",
-        `<ha-icon icon="mdi:pool"></ha-icon><span>${esc(this._st(e.pool_runtime).state)}</span>`);
+      const on = this._poolOn();
+      const pw = this._num(e.pool_power);
+      out += mk({ entity: e.pool_pump || e.pool_runtime, key: "pool", x: 74, y: 382, label: "Pool" }, `pool ${on ? "on" : ""}`,
+        `<ha-icon icon="${on ? "mdi:pump" : "mdi:pool"}"></ha-icon><span>${on && pw ? `${Math.round(pw)} W · ` : ""}${esc(this._st(e.pool_runtime).state)}</span>`);
     }
     return out;
   }
@@ -567,16 +789,21 @@ class GartenFloorPlanCard extends HTMLElement {
     if (!this._config || !this.shadowRoot || !this._hass) return;
     const sig = this._watched().map((id) => {
       const s = this._hass.states[id];
-      return s ? `${s.state}|${s.attributes.rgb_color || ""}` : "-";
+      return s ? `${s.state}|${s.attributes.rgb_color || ""}|${s.last_updated || ""}` : "-";
     }).join(";") + [...this._active].join(",");
     if (!force && sig === this._sig) return;
     this._sig = sig;
 
     const root = this.shadowRoot;
-    root.getElementById("dyn").innerHTML = this._dynSvg();
+    const dynSig = this._dynSig();
+    if (force || dynSig !== this._dynSigLast) {
+      this._dynSigLast = dynSig;
+      root.getElementById("dyn").innerHTML = this._dynSvg();
+    }
+    root.getElementById("live").innerHTML = this._liveSvg();
     root.getElementById("markers").innerHTML = this._markersHtml();
     root.getElementById("stats").innerHTML = this._statsHtml();
-    root.getElementById("map").className = `map ${[...this._active].map((l) => `l-${l}`).join(" ")}`;
+    root.getElementById("map").className = `map ${[...this._active].map((l) => `l-${l}`).join(" ")} ${this._poolOn() ? "pool-on" : ""}`;
     root.querySelectorAll(".chip.layer").forEach((b) => b.classList.toggle("active", this._active.has(b.dataset.layer)));
   }
 
@@ -776,6 +1003,41 @@ const STYLE = `
   .panel { opacity: .92; }
   .panel-shine { fill: rgba(255, 214, 102, var(--sun)); mix-blend-mode: soft-light; animation: sun 5s infinite ease-in-out; pointer-events: none; }
 
+  /* Leitungen & Fluss */
+  .line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .16; stroke: #e5e7eb; }
+  .line.power { stroke: #fbbf24; }
+  .line.water { stroke: #38bdf8; }
+  .line.grid-in { stroke: #f87171; }
+  .line.grid-out { stroke: #4ade80; }
+  .line.on { opacity: .85; stroke-width: 2.6; }
+  .line.power.on { filter: drop-shadow(0 0 3px rgba(251,191,36,.8)); }
+  .line.water.on { filter: drop-shadow(0 0 3px rgba(56,189,248,.8)); }
+  .line.grid-in.on { filter: drop-shadow(0 0 3px rgba(248,113,113,.8)); }
+  .line.grid-out.on { filter: drop-shadow(0 0 3px rgba(74,222,128,.8)); }
+  .dot.power { fill: #fff3c4; }
+  .dot.water { fill: #e0f7ff; }
+  .dot.grid-in { fill: #fecaca; }
+  .dot.grid-out { fill: #bbf7d0; }
+  .head { fill: #0c4a6e; stroke: #38bdf8; stroke-width: 1.2; }
+  .val text { font-size: 10px; font-weight: 700; text-anchor: middle; paint-order: stroke; stroke: rgba(10,18,13,.9); stroke-width: 3px; }
+  .val.power text { fill: #fde68a; }
+  .val.grid-in text { fill: #fca5a5; }
+  .val.grid-out text { fill: #86efac; }
+  .edge-label { fill: rgba(232,240,234,.55); font-size: 9px; font-weight: 700; text-anchor: end; letter-spacing: .6px; text-transform: uppercase; }
+
+  /* Pool läuft */
+  .swirl { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 1.6; stroke-dasharray: 12 16; animation: dash 1.4s linear infinite; }
+  .swirl.s2 { stroke-dasharray: 8 12; animation-duration: 1s; animation-direction: reverse; opacity: .7; }
+  .bubble { fill: rgba(255,255,255,.85); animation: bubble 1.8s infinite ease-out; opacity: 0; }
+  .map.pool-on .caustic { animation-duration: 1.1s; stroke: rgba(255,255,255,.6); }
+
+  /* Mäher */
+  .mow-zone.current { fill: rgba(163,230,53,.16); stroke: rgba(163,230,53,1); stroke-width: 2.2; }
+  .zone-tag.cur .zt-name { fill: var(--g-green); }
+  .trace { fill: none; stroke: rgba(163,230,53,.75); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 2px rgba(163,230,53,.7)); }
+  .dock rect { fill: #1f2937; stroke: var(--g-green); stroke-width: 1.2; }
+  .dock path { fill: none; stroke: var(--g-green); stroke-width: 1.4; }
+
   .light-glow { opacity: .55; animation: breathe 3.5s infinite ease-in-out; pointer-events: none; }
 
   /* Marker */
@@ -811,6 +1073,14 @@ const STYLE = `
   .m.cam { width: 28px; height: 28px; min-width: 28px; padding: 0; color: #c4b5fd; }
   .m.cam ha-icon { --mdc-icon-size: 15px; }
   .m.pool { color: #7dd3fc; font-size: .66rem; height: 28px; }
+  .m.pool.on { background: rgba(56,189,248,.35); border-color: rgba(125,211,252,.8); color: #fff; animation: pulse 1.8s infinite; }
+  .m.mower { transition: left 1.2s linear, top 1.2s linear, transform .15s ease; }
+  .m.consumer { height: 26px; min-width: 26px; padding: 0 6px; font-size: .64rem; color: var(--g-muted); }
+  .m.consumer ha-icon { --mdc-icon-size: 14px; }
+  .m.consumer.on { color: #fde68a; border-color: rgba(251,191,36,.5); }
+  .m .bdir { font-size: .62rem; font-weight: 700; }
+  .m .bdir.in { color: #4ade80; }
+  .m .bdir.out { color: #fbbf24; }
   .m.pool ha-icon { --mdc-icon-size: 15px; }
 
   .m.hit { transform: none; background: transparent; border: 0; box-shadow: none; border-radius: 8px; padding: 0; min-width: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
@@ -851,6 +1121,7 @@ const STYLE = `
   @keyframes shimmer { 0%,100% { transform: translateX(0); opacity: .5; } 50% { transform: translateX(3px); opacity: .9; } }
   @keyframes dash { to { stroke-dashoffset: -22; } }
   @keyframes ripple { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(5); opacity: 0; } }
+  @keyframes bubble { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: .9; } 100% { transform: translateY(-26px); opacity: 0; } }
   @keyframes breathe { 0%,100% { opacity: .4; } 50% { opacity: .65; } }
   @keyframes sun { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(56,189,248,.55); } 100% { box-shadow: 0 0 0 14px rgba(56,189,248,0); } }
